@@ -1,0 +1,15 @@
+# Build output
+build/
+out/
+
+# IDE files
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Compiled binaries
+*.exe
+*.obj
+*.o
+*.pdb

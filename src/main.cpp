@@ -1,10 +1,24 @@
 #include <SDL.h>
 #include <cstdint>
 #include <cstdlib>
+#include <cmath>
+#include <vector>
+#include <utility>
 #include <iostream>
 
 constexpr int CANVAS_WIDTH  = 600;
 constexpr int CANVAS_HEIGHT = 600;
+struct Vector3 {
+    double x, y, z;
+    Vector3(double x, double y, double z) : x(x), y(y), z(z) {}
+    Vector3 operator+(const Vector3& v) const { return { x + v.x, y + v.y, z + v.z }; }
+    Vector3 operator-(const Vector3& v) const { return { x - v.x, y - v.y, z - v.z }; }
+    Vector3 operator*(double k) const { return { x * k, y * k, z * k }; }
+};
+double dot(const Vector3& a, const Vector3& b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
 
 static uint32_t framebuffer[CANVAS_WIDTH * CANVAS_HEIGHT];
 
@@ -27,15 +41,68 @@ void ClearCanvas(uint32_t color) {
         framebuffer[i] = color;
 }
 
-void DrawDemoScene() {
-    for (int x = 0; x <= 255; x++) {
-        for (int y = 0; y <= 255; y++) {
-            PutPixel(x, y, MakeColor(x, y, 128)); 
-        }
+struct Sphere {
+    Vector3 center;
+    double radius;
+    uint32_t color;
+    Sphere(Vector3 c, double r, uint32_t col) : center(c), radius(r), color(col) {}
+};
+
+Sphere spheres[] = {
+    Sphere(Vector3(0, -1, 3),  1, MakeColor(255, 0, 0)),
+    Sphere(Vector3(2,  0, 4),  1, MakeColor(0, 0, 255)),
+    Sphere(Vector3(-2, 0, 4),  1, MakeColor(0, 255, 0)),
+};
+int numSpheres = 3;
+
+constexpr double Vw = 1.0;
+constexpr double Vh = 1.0;
+constexpr double d  = 1.0;
+
+Vector3 CanvasToViewport(int x,int y) {
+    return { x * Vw / CANVAS_WIDTH, y * Vh / CANVAS_HEIGHT, d};
+}
+std::pair<double, double> IntersectRaySphere(Vector3 O, Vector3 D, Sphere sphere)
+{
+
+    Vector3 CO = O - sphere.center;
+    double a = dot(D, D);
+    double b = 2 * dot(CO, D);
+    double c = dot(CO, CO) - sphere.radius * sphere.radius;
+    double discriminant = b * b - 4 * a * c;
+    if (discriminant < 0) {
+        return { 1e18, 1e18 };
+    }
+    else {
+        double t1 = (-b + sqrt(discriminant)) / (2 * a);
+        double t2 = (-b - sqrt(discriminant)) / (2 * a);
+        return { t1, t2 };
     }
 }
-
+uint32_t TraceRay(Vector3 O, Vector3 D, double t_min, double t_max) {
+    double closest_t = 1e18;
+    int closest_sphere_index = -1;
+    for (int i = 0; i <= numSpheres - 1; i++) {
+        auto [t1, t2] = IntersectRaySphere(O, D, spheres[i]);
+        if (t1 >= t_min && t1 <= t_max && t1 < closest_t) {
+            closest_t = t1;
+            closest_sphere_index = i;
+        }
+        if (t2 >= t_min && t2 <= t_max && t2 < closest_t) {
+            closest_t = t2;
+            closest_sphere_index = i;
+        }
+    }
+    if (closest_sphere_index == -1) {
+        return MakeColor(255, 255, 255);
+    }
+    else {
+        return spheres[closest_sphere_index].color;
+    }
+}
 int main(int argc, char* argv[]) {
+
+    
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         std::cerr << "SDL_Init Error: " << SDL_GetError() << "\n";
         return 1;
@@ -71,7 +138,18 @@ int main(int argc, char* argv[]) {
     );
 
     ClearCanvas(MakeColor(15, 15, 15));
-    DrawDemoScene();
+    Vector3 O(0, 0, 0);
+    for (int x = -CANVAS_WIDTH / 2; x < CANVAS_WIDTH / 2; x++)
+    {
+        for (int y = -CANVAS_HEIGHT / 2; y < CANVAS_HEIGHT / 2; y++) {
+            Vector3 D = CanvasToViewport(x, y);
+            uint32_t color = TraceRay(O, D, 1, 1e18);
+            PutPixel(x, y, color);
+        }
+            
+
+    }
+        
 
     bool running = true;
     SDL_Event event;
